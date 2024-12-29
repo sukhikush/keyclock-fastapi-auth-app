@@ -12,7 +12,38 @@ from app.config import KEYCLOAK_URL, KEYCLOAK_REALM, KEYCLOAK_CLIENT_ID
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 import os
 import requests
-import json
+from cryptography.fernet import Fernet
+
+
+
+
+# Create a Fernet cipher object
+key = Fernet.generate_key()
+cipher = Fernet(key)
+
+# Function to encrypt a message
+def encrypt_message(message: str) -> bytes:
+    """
+    Encrypt a message.
+    Args:
+        message (str): The message to encrypt.
+    Returns:
+        bytes: The encrypted message.
+    """
+    encrypted_message = cipher.encrypt(message.encode())
+    return encrypted_message
+
+# Function to decrypt a message
+def decrypt_message(encrypted_message: bytes) -> str:
+    """
+    Decrypt an encrypted message.
+    Args:
+        encrypted_message (bytes): The encrypted message to decrypt.
+    Returns:
+        str: The original decrypted message.
+    """
+    decrypted_message = cipher.decrypt(encrypted_message).decode()
+    return decrypted_message
 
 
 class UserData(BaseModel):
@@ -20,7 +51,6 @@ class UserData(BaseModel):
     preferred_username: str
 
 app = FastAPI()
-
 
 # Add the RBAC middleware
 app.add_middleware(RBACMiddleware)
@@ -61,7 +91,25 @@ def get_logout(
     Deletes cookies for authentication and provides a logout template with Keycloak configuration.
     """
 
+    # Fetch refresh_token
+    # refresh_token = decrypt_message(request.cookies.get("refresh_token"))
+
+    refresh_token_cookie = request.cookies.get("refresh_token")
+
+    if refresh_token_cookie:  # This will check for both None and empty string
+        try:
+            # Decrypt the refresh token if it exists and is not empty
+            refresh_token = decrypt_message(refresh_token_cookie)
+        except Exception as e:
+            # Handle decryption error if needed
+            refresh_token = ""
+            print(f"Error decrypting refresh token: {e}")
+    else:
+        # Handle the case where the cookie is missing or empty
+        refresh_token = ""
+
     # deleting cookies
+    response.set_cookie(key="refresh_token", value="", httponly=True,secure=True,max_age=0)
     response.set_cookie(key="token", value="", httponly=True,secure=True,max_age=0)
     response.set_cookie(key="usrData", value="", httponly=False,max_age=0)
 
@@ -74,6 +122,7 @@ def get_logout(
                 "KEYCLOAK_URL" : KEYCLOAK_URL, 
                 "KEYCLOAK_REALM" : KEYCLOAK_REALM, 
                 "KEYCLOAK_CLIENT_ID" : KEYCLOAK_CLIENT_ID,
+                "REFRESH_TOKEN":refresh_token
             }
         },
         headers=response.headers 
@@ -101,6 +150,7 @@ def get_callback(
         if fetched_token.status_code == 200:
             token_json = fetched_token.json()
 
+            refresh_token = encrypt_message(token_json.get("refresh_token"))
             access_token = token_json.get("access_token")
             jwtPayload = decodeJWT(access_token)
 
@@ -115,6 +165,7 @@ def get_callback(
             redirect = RedirectResponse(url=f"/", status_code=303)
 
             # Set session cookies
+            redirect.set_cookie(key="refresh_token", value=refresh_token, httponly=True,secure=True,)
             redirect.set_cookie(key="token", value=access_token, httponly=True,secure=True,)
             redirect.set_cookie(key="usrData", value=cookie_value, httponly=False)
             

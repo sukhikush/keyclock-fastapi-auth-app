@@ -6,12 +6,18 @@
                     realm: "{{config.KEYCLOAK_REALM}}",
                     clientId: "{{config.KEYCLOAK_CLIENT_ID}}",
                     redirectUri: window.location.origin,
+                    refreshToken:"{{config.REFRESH_TOKEN}}"
                 };
 
                 const logoutUrl = `${config.keycloakUrl}/realms/${config.realm}/protocol/openid-connect/logout`
-                    + `?redirect_uri=${encodeURIComponent(config.redirectUri)}`;
+                    + `?client_id=${config.clientId}`
+                    + `&refresh_token=${config.refreshToken}`
+                    + `&post_logout_redirect_uri=${encodeURIComponent(config.redirectUri)}`;
                 
                 window.location.replace(logoutUrl);
         </script>
     </body>
 </html>
+
+
+

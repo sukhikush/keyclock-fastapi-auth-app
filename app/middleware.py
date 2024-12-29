@@ -19,9 +19,10 @@ class RBACMiddleware(BaseHTTPMiddleware):
 
             jwtPayload = decodeJWT(token)
 
-            print(jwtPayload)
-            print("==========")
-            roles = jwtPayload.get("realm_access", {}).get("roles", [])
+            if "realm_access" in str(jwtPayload):
+                roles = jwtPayload.get("realm_access", {}).get("roles", [])
+            else:
+                roles = []
 
             request.state.roles = roles
         
