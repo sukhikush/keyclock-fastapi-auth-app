@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>React SPA</title>
+        <script src="https://unpkg.com/react@17/umd/react.development.js"></script>
+        <script src="https://unpkg.com/react-dom@17/umd/react-dom.development.js"></script>
+        <script src="https://unpkg.com/babel-standalone@6.26.0/babel.min.js"></script>
+        <script src="https://cdn.tailwindcss.com"></script>
+    </head>
+
+    <body class="bg-gray-100 min-h-screen flex items-center justify-center">
+        <div id="app"></div>
+        <script type="text/babel">
+            const { useState, useEffect } = React;
+
+            // Basic KeyCloak configuartion
+
+            const config = {
+                    keycloakUrl: 'http://localhost:8080' || "{{config.KEYCLOAK_URL}}",
+                    realm: "{{config.KEYCLOAK_REALM}}",
+                    clientId: "{{config.KEYCLOAK_CLIENT_ID}}",
+                    redirectUri: window.location.origin
+            };
+
+            const App = () => {
+
+                // Some Sate varibales to manage login and user details page.
+                const [userData,setUserData] = useState(null); // Track user details
+                const [secureResponse, setSecureResponse] = useState(null); // Track secure route detais
+                const [secureResponseColor, setSecureResponseColor] = useState('text-green-600'); // update class based on secure route status
+                
+                //Reload page is rendered using browser back button
+                useEffect(() => {
+                    window.onpageshow = (event) => {
+                        if (event.persisted) {
+                            window.location.reload();
+                        }
+                    };
+                }, []);
+
+
+                useEffect(()=>{    
+                    const cookieObj = {};
+                    document.cookie.split('; ').forEach(cookie => {
+                        const [key, value] = cookie.split('=');
+                        cookieObj[key] = decodeURIComponent(value);
+                    });
+
+                    let userData = cookieObj.usrData
+                        ? JSON.parse(cookieObj.usrData.replace(/\\054/g, ","))
+                        : null;
+                    setUserData(JSON.parse(userData));
+                },[])
+
+                //Keycloak login setup
+                const login = () => {
+                    const state = crypto.randomUUID();
+                    const authUrl = `${config.keycloakUrl}/realms/${config.realm}/protocol/openid-connect/auth`
+                        + `?client_id=${encodeURIComponent(config.clientId)}`
+                        + `&redirect_uri=${encodeURIComponent(config.redirectUri)+"/callback"}`
+                        + `&state=${encodeURIComponent(state)}`
+                        + `&response_type=code`
+                        + `&scope=openid`;
+                    window.location.href = authUrl;
+                };
+
+                //on logout hit logout route
+                const logout = () => {
+                    setUserData(null);
+                    window.location.replace("/logout");
+                };
+
+                //verfy secure end point
+                const checkSecureEndpoint = async () => {
+                    if (!userData) return;
+
+                    try {
+                        const response = await fetch('/api/v1/secure-endpoint', {
+                            method: 'GET',
+                        });
+                        const data = await response.json();
+                        if (response.ok) {
+                            setSecureResponse(data.message);
+                            setSecureResponseColor('text-green-600');
+                        } else {
+                            setSecureResponse(data.detail || 'Failed to access secure endpoint.');
+                            setSecureResponseColor('text-red-600');
+                        }
+                    } catch (error) {
+                        console.error('Secure endpoint error:', error);
+                    }
+                };
+
+                return (
+                    <div className="bg-white p-8 rounded-lg shadow-md w-96">
+                        
+                        {!userData ? (
+                            <div>
+                            <h1 className="text-2xl font-bold text-center mb-6">Login</h1>
+                            <button
+                                onClick={login}
+                                className="w-full bg-blue-500 text-white py-2 px-4 rounded hover:bg-blue-600 transition-colors"
+                            >
+                                Login
+                            </button>
+                            </div>
+                        ) : (
+                            <div>
+                                <h1 className="text-2xl font-bold text-center mb-6">Logged In</h1>
+                                <button
+                                    onClick={logout}
+                                    className="w-full bg-red-500 text-white py-2 px-4 rounded hover:bg-red-600 transition-colors"
+                                >
+                                    Logout
+                                </button>
+                                {userData && (
+                                    <div className="mt-4 p-4 bg-gray-50 rounded-lg">
+                                        <p className="font-semibold text-lg">{userData.preferred_username || 'User'}</p>
+                                        <p className="text-sm mt-1">
+                                            Roles: {userData.roles
+                                                    ? userData.roles.join(', ')
+                                                    : 'No roles'}
+                                        </p>
+                                    </div>
+                                )}
+                                <button
+                                    onClick={checkSecureEndpoint}
+                                    className="w-full bg-green-500 text-white py-2 px-4 rounded hover:bg-green-600 transition-colors mt-4"
+                                >
+                                    Check Secure Endpoint
+                                </button>
+                                {secureResponse && (
+                                    <div className={`mt-4 p-4 bg-gray-100 rounded-lg ${secureResponseColor}`}>
+                                        <p>{secureResponse}</p>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                );
+            };
+
+            ReactDOM.render(<App />, document.getElementById('app'));
+        </script>
+    </body>
+
+</html>
